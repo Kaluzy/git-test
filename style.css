@@ -4,4 +4,5 @@ td,
 tr {
   border: 2px black solid;
   color: blueviolet;
+  text-transform: capitalize;
 }
