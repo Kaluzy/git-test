@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "threads": [
+    {
+      "threadId": "replace-with-an-existing-thread-id",
+      "aliases": ["Example Store"],
+      "location": "Example City",
+      "qa": false,
+      "lookupAllowed": false,
+      "callerPhones": [],
+      "approvedMemory": {
+        "request": "Replace with the reviewed, non-sensitive purpose of this inquiry.",
+        "knownFacts": [],
+        "missingItems": []
+      },
+      "verifiedConversationIds": []
+    }
+  ]
+}

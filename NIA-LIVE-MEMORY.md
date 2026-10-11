@@ -1,32 +1,72 @@
-# Nia Live Memory v1 — same-number callback pilot
+# Nia memory and call logging v2
 
-Status: **Staged, not deployed**. Never claim this is live until a Vercel endpoint is deployed, verified, and configured on the Telnyx assistant.
+## Release boundary
 
-## Purpose
-When the same person calls back on the same telephone number used previously, Telnyx receives an authenticated initialization webhook, safely scopes memory to prior conversations between the same assistant phone number and that caller number, and gives Nia the relevant previous context before the first speech turn. If caller identification is missing, no third-party conversation history is returned.
+This source replaces the earlier same-number initialization pilot with a
+complete relay implementation. As of the October 11, 2026 preparation session,
+the relay is **not deployed**. Never describe permanent memory, the live tools,
+or automatic Notion logging as active until the hosted preflight, configuration
+readback, and controlled voice acceptance have passed.
 
-## Files
-- `api/assistant-initialization.js`: verifies signed Telnyx Ed25519 request (raw timestamp + original payload), validates event and assistant, returns caller-specific memory query.
-- `test.mjs`: synthetic signed webhook, same-number memory, unknown-caller isolation, tampering/replay rejection.
-- `vercel.json`: API function runtime duration limit.
-- `package.json`: Node ES module and test command.
+## Service flow
 
-## Configuration required after deployment
-Set **protected server-side** environment variables `TELNYX_PUBLIC_KEY`, `NIA_AGENT_NUMBER`, and `NIA_ASSISTANT_ID` on the deployment. The public signing verification key is not the Telnyx API secret; no Telnyx API secret is required for this read-only initialization endpoint. Do not put credentials into GitHub files or URLs.
+```mermaid
+flowchart TD
+  A["Signed Telnyx request"] --> B["Verify owner and call"]
+  B --> C["Initialization: scoped history"]
+  B --> D["Live tools: approved memory or note"]
+  B --> E["After call: durable event and queue"]
+  D --> F["Private ledger"]
+  E --> F
+  F --> G["Verify transcript and serialize thread"]
+  G --> H["Notion write and readback receipt"]
+  H --> I["Complete, retry, or hold for review"]
+```
 
-Deploy the feature branch as an isolated Vercel Preview first. Test the HTTPS `POST /api/assistant-initialization` endpoint with signed synthetic requests; reject unsigned or replayed calls. Only then set Nia's `dynamic_variables_webhook_url` to the confirmed HTTPS URL. The assistant greeting should remain generic until a caller identifies the specific follow-up topic.
+| Component | Contract |
+| --- | --- |
+| `api/assistant-initialization.js` | Ed25519 over the original bytes; assistant/number/channel verification; caller-filtered history; HMAC session token. |
+| `api/lookup-open-thread.js` | Signed preset fields plus call token; business/topic/location matching; fresh Notion status; reviewed non-sensitive memory only. |
+| `api/save-call-note.js` | Durable idempotent request receipt; explicit `notion_saved:false`; proposed corrections and opt-outs. |
+| `api/telnyx-events.js` | Signed terminal insight or conversation-ended event; durable storage and queue acknowledgment before HTTP success. |
+| `api/queues/process-call.js` | Private consumer; complete transcript retrieval; frozen payload; thread serialization; verified Notion receipt. |
+| `lib/ledger.mjs` | Private Blob conditional writes, stable hashed keys, leases, event/conversation deduplication, provider mutation journal. |
+| `lib/notion.mjs` | Existing data-source schema; structured transcript blocks; bot-owned markers; complete content-hash readback; ambiguous-write holds. |
+| `lib/deadline.mjs` | Request-local deadlines and cancellation across shared clients. |
+| `scripts/import-threads.mjs` | Preview/apply of existing thread mappings and explicitly reviewed legacy call IDs; no Notion mutations. |
+| `scripts/operate.mjs` | Hosted preflight, configuration preview/apply, bounded pending-work inspection, safe event redrive. |
 
-## Real-world acceptance test
-Call Nia from the exact number used in the earlier coffee-startup sales test. Say: “Hi, it's the coffee shop we spoke with earlier. I was expecting an update, but nobody contacted me. Can you remind me what you and I discussed?” Do not mention the ordering problem, contact email or any other previously known details unless Nia asks.
+## Truthful behavior
 
-Pass: Nia remembers the coffee website's broken online ordering and that the business was taking orders by phone, clearly states that no follow-up has been confirmed, offers to record a request without falsely promising action, and uses “Kal” naturally. If the caller number is different or the topic is ambiguous, she asks for identification and context rather than inventing details. An unrelated caller must never hear details of previous calls.
+Nia identifies herself as Kal's AI assistant, says Kal naturally, asks one
+question at a time, and listens through IVR prompts. Native keypad and quiet
+tools support menus/hold. Recording stays off. Calls have a six-minute cap and
+a shorter conversational/hold budget. No SMS is sent just because a call ends.
 
-Check the new Telnyx conversation and insights afterward. Notion post-call automatic merge and mid-call lookup from **different numbers** remain **separate, unimplemented follow-on work**; do not claim either passed during this pilot.
+A captured message is not a booked appointment, corrected contact, sent email,
+or promised human follow-up. Tool receipts distinguish private capture from
+verified Notion persistence. Missing history requires clarification. Caller ID
+does not prove identity. QA roleplay must not produce real outreach.
 
-## Safety
-- No audio recording.
-- Never reveal account credentials, PII, or another caller's history.
-- Caller ID is a match hint, **not identity verification**. Confirm topic/business before discussing private matters.
-- Signed webhooks with stale timestamps or bad signatures fail closed.
-- Return no memory if no recognized caller/assistant number.
-- Do not promise a call, text, booking, purchase, or email unless actually performed or confirmed.
+## Thread and failure rules
+
+Callbacks linked through a verified live lookup or registered mission stay on
+their original row. Original conversation ID, direction, and timestamp remain
+immutable. Counts use a historical baseline plus distinct new conversations;
+duplicate end/insight deliveries do not increment again. Late events retain
+their transcript while preserving the newest summary and contact time.
+
+Unmatched calls receive a separate review row. A common phone number alone
+cannot merge unrelated topics. New or personal records cannot be returned by
+the business lookup until they have an explicitly approved safe scope. A
+different caller number receives no private history through this lookup.
+
+An uncertain Notion write blocks later writes to that thread until its result
+can be independently verified. Partial transcripts or unverified ownership
+remain pending. Completion of a call never automatically closes its business
+mission. The queue retries transient failures and retains a durable index for
+operator review after its delivery limit; it does not silently discard a
+failed save or send an unrequested notification.
+
+See [the operations guide](docs/OPERATIONS.md) for credentials, hosting, import,
+live acceptance, bounds, and the remaining manual-review cases.

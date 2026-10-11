@@ -1,8 +1,16 @@
 {
-  "name": "nia-live-memory",
+  "name": "nia-call-relay",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "test": "node test.mjs"
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.8.1",
+    "@vercel/queue": "0.8.0"
   }
 }
+
