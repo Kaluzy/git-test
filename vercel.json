@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/assistant-initialization.js": {
+      "maxDuration": 10
+    }
+  }
+}
